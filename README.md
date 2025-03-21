@@ -1,5 +1,14 @@
 # Docker API gateway
 
+This demo shows how to setup a simple python Flask API that returns a message
+
+uses Docker to build an image
+
+uses Kind to setup a local cluster of containers
+
+uses Kubernetes (kubectl) to manage the clusters (deploy the cluster and services) - used to scale up or down the amount of pods (containers)
+
+
 ## Build the docker image on your laptop using the laptops network
 
 
@@ -9,7 +18,7 @@ sudo su
 
 container is now available on your laptop
 
-    root@mrxmini:/home/user/kuber# docker images
+    root@mrxmini:# docker images
 
     REPOSITORY                     TAG             IMAGE ID       CREATED          SIZE
     api-gateway                         latest          688af556c1a8   15 seconds ago   136MB
@@ -18,38 +27,12 @@ run the container
 
     docker run -d -p 8500:8500 api-gateway
 
-## Kubernetes (used to control docker pod on clusters)
+test your API
 
-    # Assuming you have kubectl configured
-
-    kubectl apply -f kuber/deployment.yaml
-    kubectl apply -f kuber/service.yaml
-
-    # Check pods
-    kubectl get pods
-
-    # Check deployment
-    kubectl get deployment
-
-    # Check service
-    kubectl get service
+  curl http://localhost:8500  < should recieve message from python api
 
 
-Here's what each part does:
-
-    Deployment:
-        Creates 2 replicas of your API gateway
-        Uses your Docker image
-        Specifies resource requests and limits
-        Manages pod lifecycle
-
-    Service:
-        Exposes your API gateway pods
-        Maps external port 80 to internal port 8500
-        Uses LoadBalancer type to make it externally accessible
-
-
-## Full setup instructions
+## Full setup instructions with local Cluster (for Prod deployement, see Production.md)
 
 install Kind - local kuber cluster (for local development)
 
@@ -83,6 +66,14 @@ build the Docker image
 load the image into cluster
 
     kind load docker-image api-gateway:latest --name local-cluster
+
+
+Install kubectl
+
+      curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      chmod +x kubectl
+      mv kubectl /usr/bin/
+
 
 create kube Deployment and Service
 
@@ -127,10 +118,26 @@ Horizontal scaling
     kubectl delete -f kube/deployment.yaml
 
 
+## CHEATSHEET
 
-## cheatsheet
 
-### Docker
+### Docker Containers
+
+stop a container
+
+    docker ps (get container ID)
+    docker stop $containerID (or by Name)
+
+stop all running containers
+
+    docker ps -a --format="{{.ID}}" | xargs docker stop
+
+
+remove all containers
+
+    docker rm $(docker ps -aq)
+
+### Docker Images
 
 see all images
 
@@ -144,9 +151,14 @@ remove all images
 
     docker rmi $(docker images -qa)
 
+
+### Docker Network
+
 get the Kind Cluster IP
 
     docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' local-cluster-control-plane
+
+---
 
 ### Kind Cluster
 
@@ -166,7 +178,37 @@ load local docker image into cluster
   
     kind load docker-image api-gateway:latest --name local-cluster
 
-### Kubectl
+---
+
+### Kubectl (Kubernetes - manages docker pod clusters)
+
+    # Assuming you have kubectl configured
+
+    kubectl apply -f kuber/deployment.yaml
+    kubectl apply -f kuber/service.yaml
+
+    # Check pods
+    kubectl get pods
+
+    # Check deployment
+    kubectl get deployment
+
+    # Check service
+    kubectl get service
+
+
+Here's what each part does:
+
+    Deployment:
+        Creates 2 replicas of your API gateway
+        Uses your Docker image
+        Specifies resource requests and limits
+        Manages pod lifecycle
+
+    Service:
+        Exposes your API gateway pods
+        Maps external port 80 to internal port 8500
+        Uses LoadBalancer type to make it externally accessible
 
     # check service
     kubectl get service api-gateway-service
@@ -200,3 +242,19 @@ load local docker image into cluster
 
     # create custom Namespace
     kubectl create namespace api-gateway
+
+
+
+## Kube Console
+
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+
+kubectl proxy
+
+Create a service account and get a token
+
+kubectl -n kubernetes-dashboard create sa dashboard-admin
+kubectl -n kubernetes-dashboard create clusterrolebinding dashboard-admin-binding --clusterrole=cluster-admin --serviceaccount=kubernetes-dashboard:dashboard-admin
+kubectl -n kubernetes-dashboard get secret $(kubectl -n kubernetes-dashboard get sa/dashboard-admin -o jsonpath="{.secrets[0].name}") -o go-template="{{.data.token | base64decode}}"
+
+Open in your browser: http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/
